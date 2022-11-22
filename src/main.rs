@@ -1,33 +1,28 @@
 use ips_pointcloud::{
-    closeness_1d, parse_input, solve_naive, solve_scan, solve_scan_aos, solve_scan_aos_subscan,
-    solve_scan_aos_subscan_threaded,
+    compute_closeness, parse_input, solve_naive, solve_scan, solve_scan_aos,
+    solve_scan_aos_subscan, solve_scan_aos_subscan_threaded,
 };
 use std::{io, time::Instant};
 
 fn main() {
-    let [x, y, z] = parse_input(io::stdin().lock());
-    assert_eq!(x.len(), y.len());
-    assert_eq!(x.len(), z.len());
-    let xyz: [&[f32]; 3] = [&x, &y, &z];
+    let xyzi = parse_input(io::stdin().lock());
     {
         let start = Instant::now();
-        let xc = closeness_1d(&x);
-        let yc = closeness_1d(&y);
-        let zc = closeness_1d(&z);
+        let [xc, yc, zc] = compute_closeness(&xyzi);
         let us = Instant::now().duration_since(start).as_micros();
         dbg!(xc, yc, zc, us);
     }
 
-    let mut ans = solve_naive(xyz);
+    let mut ans = solve_naive(&xyzi);
     let mut answers = Vec::new();
-    //answers.push(run("solve_scan", solve_scan, xyz));
-    //answers.push(run("solve_scan_aos", solve_scan_aos, xyz));
-    //answers.push(run("solve_scan_aos_subscan", solve_scan_aos_subscan, xyz));
-    answers.push(run(
-        "solve_scan_aos_subscan_threaded",
-        solve_scan_aos_subscan_threaded,
-        xyz,
-    ));
+    answers.push(run("solve_scan", || solve_scan(&xyzi)));
+    answers.push(run("solve_scan_aos", || solve_scan_aos(&xyzi)));
+    answers.push(run("solve_scan_aos_subscan", || {
+        solve_scan_aos_subscan(&xyzi)
+    }));
+    answers.push(run("solve_scan_aos_subscan_threaded", || {
+        solve_scan_aos_subscan_threaded(&xyzi)
+    }));
     println!("Neighbor count: {}", ans.len());
     {
         ans.sort_unstable();
@@ -39,16 +34,12 @@ fn main() {
             }
         }
     }
-    fn run(
-        msg: &str,
-        solver: fn([&[f32]; 3]) -> Vec<(u16, u16)>,
-        xyz: [&[f32]; 3],
-    ) -> Vec<(u16, u16)> {
+    fn run(msg: &str, solver: impl Fn() -> Vec<(u16, u16)>) -> Vec<(u16, u16)> {
         const N: usize = 1000;
         let start = Instant::now();
-        let mut ret = solver(xyz);
+        let mut ret = solver();
         for _ in 0..(N - 1) {
-            ret = solver(xyz);
+            ret = solver();
         }
         println!(
             "{msg}:\t{:>6}us",

@@ -7,37 +7,29 @@ use std::{
 const THRESHOLD: f32 = 0.05;
 const THRESHOLD2: f32 = 0.05 * 0.05;
 
-pub fn solve_naive([x, y, z]: [&[f32]; 3]) -> Vec<(u16, u16)> {
-    let n = x.len();
-    assert_eq!(n, x.len());
-    assert_eq!(n, y.len());
-    assert_eq!(n, z.len());
-    assert!(x.len() <= u16::MAX as usize);
+pub fn solve_naive(xyzi: &[(f32, f32, f32, u16)]) -> Vec<(u16, u16)> {
+    assert!(xyzi.len() <= u16::MAX as usize);
 
     let mut ans = Vec::new();
-    for i in 0..x.len() {
+    for i in 0..xyzi.len() {
         for j in 0..i {
-            let dx = x[i] - x[j];
-            let dy = y[i] - y[j];
-            let dz = z[i] - z[j];
+            let dx = xyzi[i].0 - xyzi[j].0;
+            let dy = xyzi[i].1 - xyzi[j].1;
+            let dz = xyzi[i].2 - xyzi[j].2;
             if dx * dx + dy * dy + dz * dz < THRESHOLD2 {
-                ans.push((j as u16, i as u16));
+                ans.push((xyzi[j].3, xyzi[i].3));
             }
         }
     }
     ans
 }
-pub fn solve_scan([x, y, z]: [&[f32]; 3]) -> Vec<(u16, u16)> {
-    let n = x.len();
-    assert_eq!(n, x.len());
-    assert_eq!(n, y.len());
-    assert_eq!(n, z.len());
+pub fn solve_scan(xyzi: &[(f32, f32, f32, u16)]) -> Vec<(u16, u16)> {
+    let n = xyzi.len();
     assert!(n <= u16::MAX as usize);
 
-    let mut xyzi: Vec<(f32, f32, f32, u16)> =
-        (0..x.len()).map(|i| (x[i], y[i], z[i], i as u16)).collect();
-    assert_eq!(n, xyzi.len());
+    let mut xyzi = xyzi.to_owned();
     xyzi.sort_unstable_by(|(ax, _, _, _), (bx, _, _, _)| ax.total_cmp(bx));
+
     let mut x = vec![0.0; n];
     let mut y = vec![0.0; n];
     let mut z = vec![0.0; n];
@@ -63,16 +55,13 @@ pub fn solve_scan([x, y, z]: [&[f32]; 3]) -> Vec<(u16, u16)> {
     ans
 }
 
-pub fn solve_scan_aos([x, y, z]: [&[f32]; 3]) -> Vec<(u16, u16)> {
-    let n = x.len();
-    assert_eq!(n, x.len());
-    assert_eq!(n, y.len());
-    assert_eq!(n, z.len());
+pub fn solve_scan_aos(xyzi: &[(f32, f32, f32, u16)]) -> Vec<(u16, u16)> {
+    let n = xyzi.len();
     assert!(n <= u16::MAX as usize);
 
-    let mut xyzi: Vec<(f32, f32, f32, u16)> =
-        (0..x.len()).map(|i| (x[i], y[i], z[i], i as u16)).collect();
+    let mut xyzi = xyzi.to_owned();
     assert_eq!(n, xyzi.len());
+
     xyzi.sort_unstable_by(|(ax, _, _, _), (bx, _, _, _)| ax.total_cmp(bx));
 
     let mut first_relevant = 0;
@@ -95,7 +84,7 @@ pub fn solve_scan_aos([x, y, z]: [&[f32]; 3]) -> Vec<(u16, u16)> {
     }
     ans
 }
-pub fn solve_scan_aos_subscan([x, y, z]: [&[f32]; 3]) -> Vec<(u16, u16)> {
+pub fn solve_scan_aos_subscan(xyzi: &[(f32, f32, f32, u16)]) -> Vec<(u16, u16)> {
     #[derive(Clone)]
     struct PointY {
         y: f32,
@@ -119,15 +108,12 @@ pub fn solve_scan_aos_subscan([x, y, z]: [&[f32]; 3]) -> Vec<(u16, u16)> {
             f32::total_cmp(&self.y, &other.y).then_with(|| self.idx.cmp(&other.idx))
         }
     }
-    let n = x.len();
-    assert_eq!(n, x.len());
-    assert_eq!(n, y.len());
-    assert_eq!(n, z.len());
+    let n = xyzi.len();
     assert!(n <= (u16::MAX - 10) as usize);
 
-    let mut xyzi: Vec<(f32, f32, f32, u16)> =
-        (0..x.len()).map(|i| (x[i], y[i], z[i], i as u16)).collect();
+    let mut xyzi = xyzi.to_owned();
     assert_eq!(n, xyzi.len());
+
     xyzi.sort_unstable_by(|(ax, _, _, _), (bx, _, _, _)| ax.total_cmp(bx));
 
     let mut slice_queue: VecDeque<PointY> = VecDeque::new();
@@ -177,7 +163,7 @@ pub fn solve_scan_aos_subscan([x, y, z]: [&[f32]; 3]) -> Vec<(u16, u16)> {
 // 1. Move out std::thread::available_parallelism() (fs access is a bottleneck)
 // 2. Avoid realloc on ans reducing
 // 3. Input data as AoS rather than SoA
-pub fn solve_scan_aos_subscan_threaded([x, y, z]: [&[f32]; 3]) -> Vec<(u16, u16)> {
+pub fn solve_scan_aos_subscan_threaded(xyzi: &[(f32, f32, f32, u16)]) -> Vec<(u16, u16)> {
     use rayon::prelude::{IntoParallelIterator, ParallelIterator, ParallelSliceMut};
     #[derive(Clone)]
     struct PointY {
@@ -202,14 +188,10 @@ pub fn solve_scan_aos_subscan_threaded([x, y, z]: [&[f32]; 3]) -> Vec<(u16, u16)
             f32::total_cmp(&self.y, &other.y).then_with(|| self.idx.cmp(&other.idx))
         }
     }
-    let n = x.len();
-    assert_eq!(n, x.len());
-    assert_eq!(n, y.len());
-    assert_eq!(n, z.len());
+    let n = xyzi.len();
     assert!(n <= (u16::MAX - 10) as usize);
 
-    let mut xyzi: Vec<(f32, f32, f32, u16)> =
-        (0..x.len()).map(|i| (x[i], y[i], z[i], i as u16)).collect();
+    let mut xyzi = xyzi.to_owned();
     assert_eq!(n, xyzi.len());
     xyzi.par_sort_unstable_by(|(ax, _, _, _), (bx, _, _, _)| ax.total_cmp(bx));
 
@@ -299,34 +281,37 @@ pub fn solve_scan_aos_subscan_threaded([x, y, z]: [&[f32]; 3]) -> Vec<(u16, u16)
         })
 }
 
-pub fn parse_input(mut source: impl Read) -> [Vec<f32>; 3] {
+pub fn parse_input(mut source: impl Read) -> Vec<(f32, f32, f32, u16)> {
     let mut input = String::new();
     source.read_to_string(&mut input).unwrap();
-    let mut x = Vec::new();
-    let mut y = Vec::new();
-    let mut z = Vec::new();
-    for line in input.lines() {
+    let mut ret = Vec::new();
+    for (i, line) in input.lines().enumerate() {
         let mut nums = line.split(" ");
-        x.push(nums.next().unwrap().parse().unwrap());
-        y.push(nums.next().unwrap().parse().unwrap());
-        z.push(nums.next().unwrap().parse().unwrap());
+        let x = nums.next().unwrap().parse().unwrap();
+        let y = nums.next().unwrap().parse().unwrap();
+        let z = nums.next().unwrap().parse().unwrap();
+        ret.push((x, y, z, i as u16));
         assert_eq!(nums.next(), None);
     }
-    [x, y, z]
+    ret
 }
-pub fn closeness_1d(x: &[f32]) -> usize {
-    let mut x = Vec::from(x);
-    x.sort_unstable_by(|a, b| a.total_cmp(b));
-    let mut start = 0;
-    let mut ans = 0;
-    for end in 1..x.len() {
-        while x[end] - x[start] > THRESHOLD {
-            start += 1;
+pub fn compute_closeness(xyzi: &[(f32, f32, f32, u16)]) -> [usize; 3] {
+    return [
+        closeness_1d(&xyzi.iter().map(|(x, _, _, _)| *x).collect::<Vec<_>>()),
+        closeness_1d(&xyzi.iter().map(|(_, y, _, _)| *y).collect::<Vec<_>>()),
+        closeness_1d(&xyzi.iter().map(|(_, _, z, _)| *z).collect::<Vec<_>>()),
+    ];
+    fn closeness_1d(x: &[f32]) -> usize {
+        let mut x = Vec::from(x);
+        x.sort_unstable_by(|a, b| a.total_cmp(b));
+        let mut start = 0;
+        let mut ans = 0;
+        for end in 1..x.len() {
+            while x[end] - x[start] > THRESHOLD {
+                start += 1;
+            }
+            ans += end - start;
         }
-        ans += end - start;
+        ans
     }
-    ans
-}
-pub fn compute_closeness([x, y, z]: [&[f32]; 3]) -> [usize; 3] {
-    [closeness_1d(&x), closeness_1d(&y), closeness_1d(&z)]
 }
