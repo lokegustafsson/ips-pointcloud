@@ -37,7 +37,7 @@ pub fn solve_scan([x, y, z]: [&[f32]; 3]) -> Vec<(u16, u16)> {
     let mut xyzi: Vec<(f32, f32, f32, u16)> =
         (0..x.len()).map(|i| (x[i], y[i], z[i], i as u16)).collect();
     assert_eq!(n, xyzi.len());
-    xyzi.sort_by(|(ax, _, _, _), (bx, _, _, _)| ax.total_cmp(bx));
+    xyzi.sort_unstable_by(|(ax, _, _, _), (bx, _, _, _)| ax.total_cmp(bx));
     let mut x = vec![0.0; n];
     let mut y = vec![0.0; n];
     let mut z = vec![0.0; n];
@@ -73,7 +73,7 @@ pub fn solve_scan_aos([x, y, z]: [&[f32]; 3]) -> Vec<(u16, u16)> {
     let mut xyzi: Vec<(f32, f32, f32, u16)> =
         (0..x.len()).map(|i| (x[i], y[i], z[i], i as u16)).collect();
     assert_eq!(n, xyzi.len());
-    xyzi.sort_by(|(ax, _, _, _), (bx, _, _, _)| ax.total_cmp(bx));
+    xyzi.sort_unstable_by(|(ax, _, _, _), (bx, _, _, _)| ax.total_cmp(bx));
 
     let mut first_relevant = 0;
     let mut ans = Vec::new();
@@ -128,7 +128,7 @@ pub fn solve_scan_aos_subscan([x, y, z]: [&[f32]; 3]) -> Vec<(u16, u16)> {
     let mut xyzi: Vec<(f32, f32, f32, u16)> =
         (0..x.len()).map(|i| (x[i], y[i], z[i], i as u16)).collect();
     assert_eq!(n, xyzi.len());
-    xyzi.sort_by(|(ax, _, _, _), (bx, _, _, _)| ax.total_cmp(bx));
+    xyzi.sort_unstable_by(|(ax, _, _, _), (bx, _, _, _)| ax.total_cmp(bx));
 
     let mut slice_queue: VecDeque<PointY> = VecDeque::new();
     let mut slice_set: BTreeSet<PointY> = BTreeSet::new();
@@ -191,7 +191,7 @@ pub fn parse_input(mut source: impl Read) -> [Vec<f32>; 3] {
 }
 pub fn closeness_1d(x: &[f32]) -> usize {
     let mut x = Vec::from(x);
-    x.sort_by(|a, b| a.total_cmp(b));
+    x.sort_unstable_by(|a, b| a.total_cmp(b));
     let mut start = 0;
     let mut ans = 0;
     for end in 1..x.len() {

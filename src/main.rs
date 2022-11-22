@@ -24,9 +24,9 @@ fn main() {
     answers.push(run("solve_scan_aos_subscan", solve_scan_aos_subscan, xyz));
     println!("Neighbor count: {}", ans.len());
     {
-        ans.sort();
+        ans.sort_unstable();
         for (i, a) in answers.iter_mut().enumerate() {
-            a.sort();
+            a.sort_unstable();
             assert_eq!(ans.len(), a.len(), "{i}");
             for j in 0..ans.len() {
                 assert_eq!(ans[i], a[i], "{i}, {j}");
