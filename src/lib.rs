@@ -24,39 +24,8 @@ pub fn solve_naive(xyzi: &[(f32, f32, f32, u16)]) -> Vec<(u16, u16)> {
     }
     ans
 }
+
 pub fn solve_scan(xyzi: &[(f32, f32, f32, u16)]) -> Vec<(u16, u16)> {
-    let n = xyzi.len();
-    assert!(n <= u16::MAX as usize);
-
-    let mut xyzi = xyzi.to_owned();
-    xyzi.sort_unstable_by(|(ax, _, _, _), (bx, _, _, _)| ax.total_cmp(bx));
-
-    let mut x = vec![0.0; n];
-    let mut y = vec![0.0; n];
-    let mut z = vec![0.0; n];
-    let mut idx = vec![0; n];
-    for i in 0..n {
-        (x[i], y[i], z[i], idx[i]) = xyzi[i];
-    }
-    let mut first_relevant = 0;
-    let mut ans = Vec::new();
-    for i in 0..n {
-        while x[i] - x[first_relevant] > THRESHOLD {
-            first_relevant += 1;
-        }
-        for j in first_relevant..i {
-            let dx = x[i] - x[j];
-            let dy = y[j] - y[i];
-            let dz = z[j] - z[i];
-            if dx * dx + dy * dy + dz * dz < THRESHOLD2 {
-                ans.push((u16::min(idx[i], idx[j]), u16::max(idx[i], idx[j])));
-            }
-        }
-    }
-    ans
-}
-
-pub fn solve_scan_aos(xyzi: &[(f32, f32, f32, u16)]) -> Vec<(u16, u16)> {
     let n = xyzi.len();
     assert!(n <= u16::MAX as usize);
 
@@ -85,7 +54,7 @@ pub fn solve_scan_aos(xyzi: &[(f32, f32, f32, u16)]) -> Vec<(u16, u16)> {
     }
     ans
 }
-pub fn solve_scan_aos_subscan(xyzi: &[(f32, f32, f32, u16)]) -> Vec<(u16, u16)> {
+pub fn solve_subscan(xyzi: &[(f32, f32, f32, u16)]) -> Vec<(u16, u16)> {
     #[derive(Clone)]
     struct PointY {
         y: f32,
@@ -163,8 +132,8 @@ pub fn solve_scan_aos_subscan(xyzi: &[(f32, f32, f32, u16)]) -> Vec<(u16, u16)> 
 // TODO
 // 2. Avoid realloc on ans reducing
 // 3. Input data as AoS rather than SoA
-pub fn solve_scan_aos_subscan_threaded(
-    xyzi: &[(f32, f32, f32, u16)],
+pub fn solve_subscan_threaded(
+    xyzi: &mut [(f32, f32, f32, u16)],
     parallel: NonZeroUsize,
 ) -> Vec<(u16, u16)> {
     use rayon::prelude::{IntoParallelIterator, ParallelIterator, ParallelSliceMut};
@@ -194,7 +163,6 @@ pub fn solve_scan_aos_subscan_threaded(
     let n = xyzi.len();
     assert!(n <= (u16::MAX - 10) as usize);
 
-    let mut xyzi = xyzi.to_owned();
     assert_eq!(n, xyzi.len());
     xyzi.par_sort_unstable_by(|(ax, _, _, _), (bx, _, _, _)| ax.total_cmp(bx));
 
@@ -273,6 +241,8 @@ pub fn solve_scan_aos_subscan_threaded(
                 Vec::new()
             }
         })
+        .collect::<Vec<_>>()
+        .into_par_iter()
         .reduce(Vec::new, |mut a, b| {
             if a.is_empty() {
                 b

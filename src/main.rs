@@ -1,6 +1,5 @@
 use ips_pointcloud::{
-    compute_closeness, parse_input, solve_naive, solve_scan, solve_scan_aos,
-    solve_scan_aos_subscan, solve_scan_aos_subscan_threaded,
+    compute_closeness, parse_input, solve_naive, solve_scan, solve_subscan, solve_subscan_threaded,
 };
 use std::{io, time::Instant};
 
@@ -16,13 +15,13 @@ fn main() {
 
     let mut ans = solve_naive(&xyzi);
     let mut answers = Vec::new();
-    answers.push(run("solve_scan", || solve_scan(&xyzi)));
-    answers.push(run("solve_scan_aos", || solve_scan_aos(&xyzi)));
-    answers.push(run("solve_scan_aos_subscan", || {
-        solve_scan_aos_subscan(&xyzi)
-    }));
-    answers.push(run("solve_scan_aos_subscan_threaded", || {
-        solve_scan_aos_subscan_threaded(&xyzi, parallel)
+    //answers.push(run("solve_scan", || solve_scan(&xyzi)));
+    //answers.push(run("solve_subscan", || {
+    //    solve_subscan(&xyzi)
+    //}));
+    answers.push(run("solve_subscan_threaded", || {
+        let mut xyzi = xyzi.to_owned();
+        solve_subscan_threaded(&mut xyzi, parallel)
     }));
     println!("Neighbor count: {}", ans.len());
     {
