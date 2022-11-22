@@ -27,13 +27,13 @@
         rust = import ./rust.nix {
           inherit lib pkgs;
           workspace-binaries = {
-            replace-me = {
+            ips-pointcloud = {
               rpath = p: [ ];
               run_time_ld_library_path = p: [ ];
             };
           };
           extra-overrides = { mkNativeDep, mkEnvDep, p }:
-            [ (mkNativeDep "replace-me" [ ]) ];
+            [ (mkNativeDep "ips-pointcloud" [ ]) ];
         };
       in {
         devShells.default = rust.rustPkgs.workspaceShell {
@@ -45,6 +45,6 @@
           ] ++ builtins.attrValues rust.packages;
         };
 
-        packages = rust.packages // { default = rust.packages.replace-me; };
+        packages = rust.packages // { default = rust.packages.ips-pointcloud; };
       });
 }
