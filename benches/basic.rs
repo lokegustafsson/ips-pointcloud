@@ -1,6 +1,7 @@
 use criterion::Criterion;
 use ips_pointcloud::{
     compute_closeness, parse_input, solve_scan, solve_scan_aos, solve_scan_aos_subscan,
+    solve_scan_aos_subscan_threaded,
 };
 
 const DATA: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/data.in"));
@@ -22,6 +23,9 @@ fn criterion_benchmark(c: &mut Criterion) {
         b.iter(|| solve_scan_aos(criterion::black_box(xyz)))
     });
     c.bench_function("solve_scan_aos_subscan", |b| {
+        b.iter(|| solve_scan_aos_subscan(criterion::black_box(xyz)))
+    });
+    c.bench_function("solve_scan_aos_subscan_threaded", |b| {
         b.iter(|| solve_scan_aos_subscan(criterion::black_box(xyz)))
     });
 }

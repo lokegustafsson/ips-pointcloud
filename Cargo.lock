@@ -193,6 +193,7 @@ name = "ips-pointcloud"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rayon",
 ]
 
 [[package]]
