@@ -6,6 +6,7 @@ use std::{io, time::Instant};
 
 fn main() {
     let xyzi = parse_input(io::stdin().lock());
+    let parallel = std::thread::available_parallelism().unwrap();
     {
         let start = Instant::now();
         let [xc, yc, zc] = compute_closeness(&xyzi);
@@ -21,7 +22,7 @@ fn main() {
         solve_scan_aos_subscan(&xyzi)
     }));
     answers.push(run("solve_scan_aos_subscan_threaded", || {
-        solve_scan_aos_subscan_threaded(&xyzi)
+        solve_scan_aos_subscan_threaded(&xyzi, parallel)
     }));
     println!("Neighbor count: {}", ans.len());
     {

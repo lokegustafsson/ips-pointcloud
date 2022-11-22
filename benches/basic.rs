@@ -8,6 +8,7 @@ const DATA: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/data.in
 
 fn criterion_benchmark(c: &mut Criterion) {
     let xyzi = &parse_input(DATA);
+    let parallel = std::thread::available_parallelism().unwrap();
 
     c.bench_function("compute_closeness", |b| {
         b.iter(|| compute_closeness(criterion::black_box(xyzi)))
@@ -22,7 +23,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         b.iter(|| solve_scan_aos_subscan(criterion::black_box(xyzi)))
     });
     c.bench_function("solve_scan_aos_subscan_threaded", |b| {
-        b.iter(|| solve_scan_aos_subscan_threaded(criterion::black_box(xyzi)))
+        b.iter(|| solve_scan_aos_subscan_threaded(criterion::black_box(xyzi), parallel))
     });
 }
 

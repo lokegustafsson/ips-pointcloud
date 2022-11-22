@@ -2,6 +2,7 @@ use std::{
     cmp::Ordering,
     collections::{BTreeSet, VecDeque},
     io::Read,
+    num::NonZeroUsize,
 };
 
 const THRESHOLD: f32 = 0.05;
@@ -160,10 +161,12 @@ pub fn solve_scan_aos_subscan(xyzi: &[(f32, f32, f32, u16)]) -> Vec<(u16, u16)> 
     ans
 }
 // TODO
-// 1. Move out std::thread::available_parallelism() (fs access is a bottleneck)
 // 2. Avoid realloc on ans reducing
 // 3. Input data as AoS rather than SoA
-pub fn solve_scan_aos_subscan_threaded(xyzi: &[(f32, f32, f32, u16)]) -> Vec<(u16, u16)> {
+pub fn solve_scan_aos_subscan_threaded(
+    xyzi: &[(f32, f32, f32, u16)],
+    parallel: NonZeroUsize,
+) -> Vec<(u16, u16)> {
     use rayon::prelude::{IntoParallelIterator, ParallelIterator, ParallelSliceMut};
     #[derive(Clone)]
     struct PointY {
@@ -254,13 +257,12 @@ pub fn solve_scan_aos_subscan_threaded(xyzi: &[(f32, f32, f32, u16)]) -> Vec<(u1
         }
         ans
     }
-    let parallel = std::thread::available_parallelism().unwrap().get();
-    (0..parallel)
+    (0..parallel.get())
         .into_par_iter()
         .map(|chunk_idx| {
-            let chunk_size = (xyzi.len() / parallel).max(1).min(xyzi.len());
+            let chunk_size = (xyzi.len() / parallel.get()).max(1).min(xyzi.len());
             let start = chunk_idx * chunk_size;
-            let end = if chunk_idx + 1 == parallel {
+            let end = if chunk_idx + 1 == parallel.get() {
                 xyzi.len()
             } else {
                 usize::min(start + chunk_size, xyzi.len())
@@ -296,14 +298,22 @@ pub fn parse_input(mut source: impl Read) -> Vec<(f32, f32, f32, u16)> {
     ret
 }
 pub fn compute_closeness(xyzi: &[(f32, f32, f32, u16)]) -> [usize; 3] {
-    return [
-        closeness_1d(&xyzi.iter().map(|(x, _, _, _)| *x).collect::<Vec<_>>()),
-        closeness_1d(&xyzi.iter().map(|(_, y, _, _)| *y).collect::<Vec<_>>()),
-        closeness_1d(&xyzi.iter().map(|(_, _, z, _)| *z).collect::<Vec<_>>()),
-    ];
+    use rayon::prelude::{IntoParallelIterator, ParallelIterator, ParallelSliceMut};
+    return vec![
+        Box::new(|| closeness_1d(&xyzi.iter().map(|(x, _, _, _)| *x).collect::<Vec<_>>()))
+            as Box<dyn Sync + Fn() -> usize>,
+        Box::new(|| closeness_1d(&xyzi.iter().map(|(_, y, _, _)| *y).collect::<Vec<_>>())),
+        Box::new(|| closeness_1d(&xyzi.iter().map(|(_, _, z, _)| *z).collect::<Vec<_>>())),
+    ]
+    .into_par_iter()
+    .map(|fun| fun())
+    .collect::<Vec<usize>>()
+    .try_into()
+    .unwrap();
+
     fn closeness_1d(x: &[f32]) -> usize {
         let mut x = Vec::from(x);
-        x.sort_unstable_by(|a, b| a.total_cmp(b));
+        x.par_sort_unstable_by(|a, b| a.total_cmp(b));
         let mut start = 0;
         let mut ans = 0;
         for end in 1..x.len() {
