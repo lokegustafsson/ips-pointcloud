@@ -15,5 +15,6 @@ name = "basic"
 harness = false
 
 [profile.release]
+debug = 1
 lto = true
 opt-level = 3
