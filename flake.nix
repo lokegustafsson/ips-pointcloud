@@ -41,9 +41,10 @@
           in [
             cargo2nix.outputs.packages.${system}.cargo2nix
             p.cargo-flamegraph
-            p.rust-bin.stable.latest.clippy
-            p.rust-bin.stable.latest.default
-          ] ++ builtins.attrValues rust.packages;
+            p.llvm
+            p.rust-bin.nightly.latest.clippy
+            p.rust-bin.nightly.latest.default
+          ];# ++ builtins.attrValues rust.packages;
         };
 
         packages = rust.packages // { default = rust.packages.ips-pointcloud; };

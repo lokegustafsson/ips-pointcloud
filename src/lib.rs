@@ -2,6 +2,7 @@ use std::{
     cmp::Ordering,
     collections::{BTreeSet, VecDeque},
     io::Read,
+    mem::{self, MaybeUninit},
     num::NonZeroUsize,
 };
 
@@ -135,7 +136,8 @@ pub fn solve_subscan(xyzi: &[(f32, f32, f32, u16)]) -> Vec<(u16, u16)> {
 pub fn solve_subscan_threaded(
     xyzi: &mut [(f32, f32, f32, u16)],
     parallel: NonZeroUsize,
-) -> Vec<(u16, u16)> {
+    ret: &mut Vec<MaybeUninit<(u16, u16)>>,
+) {
     use rayon::prelude::{IntoParallelIterator, ParallelIterator, ParallelSliceMut};
     #[derive(Clone)]
     struct PointY {
@@ -225,32 +227,69 @@ pub fn solve_subscan_threaded(
         }
         ans
     }
-    (0..parallel.get())
-        .into_par_iter()
-        .map(|chunk_idx| {
-            let chunk_size = (xyzi.len() / parallel.get()).max(1).min(xyzi.len());
-            let start = chunk_idx * chunk_size;
-            let end = if chunk_idx + 1 == parallel.get() {
-                xyzi.len()
-            } else {
-                usize::min(start + chunk_size, xyzi.len())
-            };
-            if start < end {
-                solve_interval(&xyzi, start, end)
-            } else {
-                Vec::new()
-            }
-        })
-        .collect::<Vec<_>>()
-        .into_par_iter()
-        .reduce(Vec::new, |mut a, b| {
-            if a.is_empty() {
-                b
-            } else {
-                a.extend_from_slice(&b);
-                a
-            }
-        })
+    if false {
+        let chunks: Vec<Vec<(u16, u16)>> = (0..parallel.get())
+            .into_par_iter()
+            .map(|chunk_idx| {
+                let chunk_size = (xyzi.len() / parallel.get()).max(1).min(xyzi.len());
+                let start = chunk_idx * chunk_size;
+                let end = if chunk_idx + 1 == parallel.get() {
+                    xyzi.len()
+                } else {
+                    usize::min(start + chunk_size, xyzi.len())
+                };
+                if start < end {
+                    solve_interval(&xyzi, start, end)
+                } else {
+                    Vec::new()
+                }
+            })
+            .collect();
+        let total_ans_length = chunks.iter().map(|chunk| chunk.len()).sum();
+        ret.truncate(0);
+        ret.reserve(total_ans_length);
+        ret.resize(total_ans_length, MaybeUninit::uninit());
+
+        let mut chunk_assignments = Vec::new();
+        let mut ret_suffix: &mut [MaybeUninit<(u16, u16)>] = ret.as_mut();
+        for chunk in chunks {
+            let (ret_chunk, new_ret_suffix) = ret_suffix.split_at_mut(chunk.len());
+            ret_suffix = new_ret_suffix;
+            chunk_assignments.push((ret_chunk, chunk));
+        }
+        assert_eq!(ret_suffix.len(), 0);
+        chunk_assignments
+            .into_par_iter()
+            .for_each(|(ret_chunk, chunk)| {
+                assert_eq!(ret_chunk.len(), chunk.len());
+                ret_chunk.copy_from_slice(&slice_wrap_maybeinit(&chunk))
+            });
+    } else {
+        *ret = (0..parallel.get())
+            .into_par_iter()
+            .map(|chunk_idx| {
+                let chunk_size = (xyzi.len() / parallel.get()).max(1).min(xyzi.len());
+                let start = chunk_idx * chunk_size;
+                let end = if chunk_idx + 1 == parallel.get() {
+                    xyzi.len()
+                } else {
+                    usize::min(start + chunk_size, xyzi.len())
+                };
+                if start < end {
+                    vec_wrap_maybeinit(solve_interval(&xyzi, start, end))
+                } else {
+                    Vec::new()
+                }
+            })
+            .reduce(Vec::new, |mut a, b| {
+                if a.is_empty() {
+                    b
+                } else {
+                    a.extend_from_slice(&b);
+                    a
+                }
+            })
+    }
 }
 
 pub fn parse_input(mut source: impl Read) -> Vec<(f32, f32, f32, u16)> {
@@ -294,4 +333,14 @@ pub fn compute_closeness(xyzi: &[(f32, f32, f32, u16)]) -> [usize; 3] {
         }
         ans
     }
+}
+
+pub unsafe fn slice_assume_init(s: &mut [MaybeUninit<(u16, u16)>]) -> &mut [(u16, u16)] {
+    mem::transmute(s)
+}
+pub fn vec_wrap_maybeinit(s: Vec<(u16, u16)>) -> Vec<MaybeUninit<(u16, u16)>> {
+    unsafe { mem::transmute(s) }
+}
+fn slice_wrap_maybeinit(s: &[(u16, u16)]) -> &[MaybeUninit<(u16, u16)>] {
+    unsafe { mem::transmute(s) }
 }

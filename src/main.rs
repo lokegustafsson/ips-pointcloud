@@ -1,5 +1,6 @@
 use ips_pointcloud::{
-    compute_closeness, parse_input, solve_naive, solve_scan, solve_subscan, solve_subscan_threaded,
+    compute_closeness, parse_input, slice_assume_init, solve_naive, solve_scan, solve_subscan,
+    solve_subscan_threaded,
 };
 use std::{io, time::Instant};
 
@@ -15,14 +16,18 @@ fn main() {
 
     let mut ans = solve_naive(&xyzi);
     let mut answers = Vec::new();
+    let mut solve_subscan_threaded_ret = Vec::new();
     //answers.push(run("solve_scan", || solve_scan(&xyzi)));
     //answers.push(run("solve_subscan", || {
     //    solve_subscan(&xyzi)
     //}));
-    answers.push(run("solve_subscan_threaded", || {
-        let mut xyzi = xyzi.to_owned();
-        solve_subscan_threaded(&mut xyzi, parallel)
-    }));
+    answers.push({
+        run("solve_subscan_threaded", || {
+            let mut xyzi = xyzi.clone();
+            solve_subscan_threaded(&mut xyzi, parallel, &mut solve_subscan_threaded_ret);
+        });
+        unsafe { slice_assume_init(solve_subscan_threaded_ret.as_mut()) }
+    });
     println!("Neighbor count: {}", ans.len());
     {
         ans.sort_unstable();
@@ -30,21 +35,19 @@ fn main() {
             a.sort_unstable();
             assert_eq!(ans.len(), a.len(), "{i}");
             for j in 0..ans.len() {
-                assert_eq!(ans[i], a[i], "{i}, {j}");
+                assert_eq!(ans[j], a[j], "{i}, {j}");
             }
         }
     }
-    fn run(msg: &str, solver: impl Fn() -> Vec<(u16, u16)>) -> Vec<(u16, u16)> {
-        const N: usize = 1000;
+    fn run<'a>(msg: &str, mut solver: impl FnMut()) {
+        const N: usize = 500;
         let start = Instant::now();
-        let mut ret = solver();
-        for _ in 0..(N - 1) {
-            ret = solver();
+        for _ in 0..N {
+            solver();
         }
         println!(
             "{msg}:\t{:>6}us",
             Instant::now().duration_since(start).as_micros() / (N as u128)
         );
-        ret
     }
 }
