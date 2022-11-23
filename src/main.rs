@@ -7,6 +7,7 @@ use std::{io, time::Instant};
 fn main() {
     let xyzi = parse_input(io::stdin().lock());
     let parallel = std::thread::available_parallelism().unwrap();
+    dbg!(parallel);
     {
         let start = Instant::now();
         let [xc, yc, zc] = compute_closeness(&xyzi);
@@ -14,22 +15,31 @@ fn main() {
         dbg!(xc, yc, zc, us);
     }
 
-    let mut ans = solve_naive(&xyzi);
+    //let mut ans = solve_naive(&xyzi);
     let mut answers = Vec::new();
-    let mut solve_subscan_threaded_ret = Vec::new();
     //answers.push(run("solve_scan", || solve_scan(&xyzi)));
     //answers.push(run("solve_subscan", || {
     //    solve_subscan(&xyzi)
     //}));
+
+    let mut solve_subscan_threaded_xyzi = Vec::new();
+    let mut solve_subscan_threaded_ret = Vec::new();
     answers.push({
         run("solve_subscan_threaded", || {
-            let mut xyzi = xyzi.clone();
-            solve_subscan_threaded(&mut xyzi, parallel, &mut solve_subscan_threaded_ret);
+            // `solve_subscan_threaded` will sort `xyzi` by `x`.
+            // This memcpy takes like 70% of the run time
+            solve_subscan_threaded_xyzi.truncate(0);
+            solve_subscan_threaded_xyzi.extend_from_slice(&xyzi);
+            solve_subscan_threaded(
+                &mut solve_subscan_threaded_xyzi,
+                parallel,
+                &mut solve_subscan_threaded_ret,
+            );
         });
         unsafe { slice_assume_init(solve_subscan_threaded_ret.as_mut()) }
     });
+    /*{
     println!("Neighbor count: {}", ans.len());
-    {
         ans.sort_unstable();
         for (i, a) in answers.iter_mut().enumerate() {
             a.sort_unstable();
@@ -38,9 +48,9 @@ fn main() {
                 assert_eq!(ans[j], a[j], "{i}, {j}");
             }
         }
-    }
+    }*/
     fn run<'a>(msg: &str, mut solver: impl FnMut()) {
-        const N: usize = 500;
+        const N: usize = 3000;
         let start = Instant::now();
         for _ in 0..N {
             solver();

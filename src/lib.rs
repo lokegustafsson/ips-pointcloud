@@ -1,4 +1,5 @@
 use std::{
+    cell::UnsafeCell,
     cmp::Ordering,
     collections::{BTreeSet, VecDeque},
     io::Read,
@@ -130,15 +131,76 @@ pub fn solve_subscan(xyzi: &[(f32, f32, f32, u16)]) -> Vec<(u16, u16)> {
     }
     ans
 }
-// TODO
-// 2. Avoid realloc on ans reducing
-// 3. Input data as AoS rather than SoA
 pub fn solve_subscan_threaded(
     xyzi: &mut [(f32, f32, f32, u16)],
     parallel: NonZeroUsize,
     ret: &mut Vec<MaybeUninit<(u16, u16)>>,
 ) {
     use rayon::prelude::{IntoParallelIterator, ParallelIterator, ParallelSliceMut};
+
+    let n = xyzi.len();
+    assert!(n <= (u16::MAX - 10) as usize);
+
+    assert_eq!(n, xyzi.len());
+    xyzi.par_sort_unstable_by(|(ax, _, _, _), (bx, _, _, _)| ax.total_cmp(bx));
+
+    #[derive(Clone, Copy)]
+    struct RetPtr(*const UnsafeCell<Vec<MaybeUninit<(u16, u16)>>>);
+    impl RetPtr {
+        unsafe fn get_mut(self) -> &'static mut Vec<MaybeUninit<(u16, u16)>> {
+            &mut *UnsafeCell::raw_get(self.0)
+        }
+    }
+    unsafe impl Send for RetPtr {}
+    unsafe impl Sync for RetPtr {}
+    let ret_ptr = unsafe {
+        RetPtr(mem::transmute::<*mut Vec<_>, *const UnsafeCell<Vec<_>>>(
+            ret,
+        ))
+    };
+    ret.truncate(0);
+
+    (0..parallel.get())
+        .into_par_iter()
+        .map(|chunk_idx| {
+            let chunk_size = (xyzi.len() / parallel.get()).max(1).min(xyzi.len());
+            let start = chunk_idx * chunk_size;
+            let end = if chunk_idx + 1 == parallel.get() {
+                xyzi.len()
+            } else {
+                usize::min(start + chunk_size, xyzi.len())
+            };
+            (
+                if start < end {
+                    vec_wrap_maybeinit(subscan::solve_interval(&xyzi, start, end))
+                } else {
+                    Vec::new()
+                },
+                chunk_idx == 0,
+            )
+        })
+        .reduce(
+            || (Vec::new(), false),
+            move |(mut a, a_first), (b, b_first)| {
+                if a_first || b_first {
+                    {
+                        let ret_inner = unsafe { ret_ptr.get_mut() };
+                        ret_inner.extend_from_slice(&a);
+                        ret_inner.extend_from_slice(&b);
+                    }
+                    (Vec::new(), true)
+                } else if a.is_empty() {
+                    (b, false)
+                } else {
+                    a.extend_from_slice(&b);
+                    (a, false)
+                }
+            },
+        );
+}
+mod subscan {
+    use super::*;
+
     #[derive(Clone)]
     struct PointY {
         y: f32,
@@ -162,13 +224,11 @@ pub fn solve_subscan_threaded(
             f32::total_cmp(&self.y, &other.y).then_with(|| self.idx.cmp(&other.idx))
         }
     }
-    let n = xyzi.len();
-    assert!(n <= (u16::MAX - 10) as usize);
-
-    assert_eq!(n, xyzi.len());
-    xyzi.par_sort_unstable_by(|(ax, _, _, _), (bx, _, _, _)| ax.total_cmp(bx));
-
-    fn solve_interval(xyzi: &[(f32, f32, f32, u16)], start: usize, end: usize) -> Vec<(u16, u16)> {
+    pub fn solve_interval(
+        xyzi: &[(f32, f32, f32, u16)],
+        start: usize,
+        end: usize,
+    ) -> Vec<(u16, u16)> {
         let n = xyzi.len();
         assert!(n <= (u16::MAX - 10) as usize);
 
@@ -226,69 +286,6 @@ pub fn solve_subscan_threaded(
             slice_set.insert(slice_queue.back().unwrap().clone());
         }
         ans
-    }
-    if false {
-        let chunks: Vec<Vec<(u16, u16)>> = (0..parallel.get())
-            .into_par_iter()
-            .map(|chunk_idx| {
-                let chunk_size = (xyzi.len() / parallel.get()).max(1).min(xyzi.len());
-                let start = chunk_idx * chunk_size;
-                let end = if chunk_idx + 1 == parallel.get() {
-                    xyzi.len()
-                } else {
-                    usize::min(start + chunk_size, xyzi.len())
-                };
-                if start < end {
-                    solve_interval(&xyzi, start, end)
-                } else {
-                    Vec::new()
-                }
-            })
-            .collect();
-        let total_ans_length = chunks.iter().map(|chunk| chunk.len()).sum();
-        ret.truncate(0);
-        ret.reserve(total_ans_length);
-        ret.resize(total_ans_length, MaybeUninit::uninit());
-
-        let mut chunk_assignments = Vec::new();
-        let mut ret_suffix: &mut [MaybeUninit<(u16, u16)>] = ret.as_mut();
-        for chunk in chunks {
-            let (ret_chunk, new_ret_suffix) = ret_suffix.split_at_mut(chunk.len());
-            ret_suffix = new_ret_suffix;
-            chunk_assignments.push((ret_chunk, chunk));
-        }
-        assert_eq!(ret_suffix.len(), 0);
-        chunk_assignments
-            .into_par_iter()
-            .for_each(|(ret_chunk, chunk)| {
-                assert_eq!(ret_chunk.len(), chunk.len());
-                ret_chunk.copy_from_slice(&slice_wrap_maybeinit(&chunk))
-            });
-    } else {
-        *ret = (0..parallel.get())
-            .into_par_iter()
-            .map(|chunk_idx| {
-                let chunk_size = (xyzi.len() / parallel.get()).max(1).min(xyzi.len());
-                let start = chunk_idx * chunk_size;
-                let end = if chunk_idx + 1 == parallel.get() {
-                    xyzi.len()
-                } else {
-                    usize::min(start + chunk_size, xyzi.len())
-                };
-                if start < end {
-                    vec_wrap_maybeinit(solve_interval(&xyzi, start, end))
-                } else {
-                    Vec::new()
-                }
-            })
-            .reduce(Vec::new, |mut a, b| {
-                if a.is_empty() {
-                    b
-                } else {
-                    a.extend_from_slice(&b);
-                    a
-                }
-            })
     }
 }
 
