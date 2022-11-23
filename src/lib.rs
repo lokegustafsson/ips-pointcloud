@@ -1,3 +1,4 @@
+use rayon::prelude::{IntoParallelIterator, ParallelIterator, ParallelSliceMut};
 use std::{
     cell::UnsafeCell,
     cmp::Ordering,
@@ -40,8 +41,6 @@ pub fn solve_threaded<IS: IntervalSolver>(
     parallel: NonZeroUsize,
     ret: &mut Vec<MaybeUninit<(u16, u16)>>,
 ) {
-    use rayon::prelude::{IntoParallelIterator, ParallelIterator, ParallelSliceMut};
-
     let n = xyzi.len();
     assert!(n <= (u16::MAX - 10) as usize);
 
@@ -240,7 +239,6 @@ pub fn parse_input(mut source: impl Read) -> Vec<(f32, f32, f32, u16)> {
     ret
 }
 pub fn compute_closeness(xyzi: &[(f32, f32, f32, u16)]) -> [usize; 3] {
-    use rayon::prelude::{IntoParallelIterator, ParallelIterator, ParallelSliceMut};
     return vec![
         Box::new(|| closeness_1d(&xyzi.iter().map(|(x, _, _, _)| *x).collect::<Vec<_>>()))
             as Box<dyn Sync + Fn() -> usize>,
@@ -275,8 +273,5 @@ pub unsafe fn slice_assume_init(s: &mut [MaybeUninit<(u16, u16)>]) -> &mut [(u16
     mem::transmute(s)
 }
 pub fn vec_wrap_maybeinit(s: Vec<(u16, u16)>) -> Vec<MaybeUninit<(u16, u16)>> {
-    unsafe { mem::transmute(s) }
-}
-fn slice_wrap_maybeinit(s: &[(u16, u16)]) -> &[MaybeUninit<(u16, u16)>] {
     unsafe { mem::transmute(s) }
 }
