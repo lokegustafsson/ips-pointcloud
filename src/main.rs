@@ -20,6 +20,7 @@ fn main() {
     let mut ans = solve_naive(xyzi);
     let mut answers = Vec::new();
 
+    /*
     let mut scan_xyzi = Vec::new();
     let mut scan_ret = Vec::new();
     answers.push({
@@ -30,6 +31,7 @@ fn main() {
         });
         unsafe { slice_assume_init(scan_ret.as_mut()) }
     });
+    */
 
     let mut subscan_xyzi = Vec::new();
     let mut subscan_ret = Vec::new();

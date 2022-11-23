@@ -165,6 +165,8 @@ impl IntervalSolver for SubscanSolver {
         }
         let n = xyzi.len();
         assert!(n <= (u16::MAX - 10) as usize);
+        assert!(start <= end);
+        assert!(end <= n);
 
         ret.truncate(0);
 
