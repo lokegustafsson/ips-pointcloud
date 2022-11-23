@@ -169,19 +169,17 @@ impl IntervalSolver for SubscanSolver {
         ret.truncate(0);
 
         let pre_start_x = xyzi[start].0 - THRESHOLD;
+        let (Ok(pre_start) | Err(pre_start)) =
+            xyzi.binary_search_by(|&(x, _, _, _)| x.total_cmp(&pre_start_x));
 
-        let mut slice_queue: VecDeque<PointY> = VecDeque::new();
-        let mut slice_set: BTreeSet<PointY> = BTreeSet::new();
-        for i in {
-            let (Ok(pre_start) | Err(pre_start)) =
-                xyzi.binary_search_by(|&(x, _, _, _)| x.total_cmp(&pre_start_x));
-            pre_start
-        }..start
-        {
-            let (x, y, z, idx) = xyzi[i];
-            slice_queue.push_back(PointY { x, y, z, idx });
-            slice_set.insert(slice_queue.back().unwrap().clone());
-        }
+        let mut slice_queue: VecDeque<PointY> = (pre_start..start)
+            .map(|i| {
+                let (x, y, z, idx) = xyzi[i];
+                PointY { x, y, z, idx }
+            })
+            .collect();
+        let mut slice_set: BTreeSet<PointY> = slice_queue.iter().cloned().collect();
+
         for i in start..end {
             let (xi, yi, zi, ii) = xyzi[i];
             while slice_queue.front().is_some() && xi - slice_queue.front().unwrap().x > THRESHOLD {
