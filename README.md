@@ -1,6 +1,6 @@
 ### Task
 
-Find all pairs of points closer than `0.05` euclidean distance apart in 3D.
+Find all pairs of points in `positions.xyz` closer than `0.05` euclidean distance apart in 3D.
 
 ### Performance
 
