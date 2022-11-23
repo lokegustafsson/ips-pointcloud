@@ -27,111 +27,15 @@ pub fn solve_naive(xyzi: &[(f32, f32, f32, u16)]) -> Vec<(u16, u16)> {
     ans
 }
 
-pub fn solve_scan(xyzi: &[(f32, f32, f32, u16)]) -> Vec<(u16, u16)> {
-    let n = xyzi.len();
-    assert!(n <= u16::MAX as usize);
-
-    let mut xyzi = xyzi.to_owned();
-    assert_eq!(n, xyzi.len());
-
-    xyzi.sort_unstable_by(|(ax, _, _, _), (bx, _, _, _)| ax.total_cmp(bx));
-
-    let mut first_relevant = 0;
-    let mut ans = Vec::new();
-    for i in 0..n {
-        for j in first_relevant..i {
-            let (xi, yi, zi, ii) = xyzi[i];
-            let (xj, yj, zj, ij) = xyzi[j];
-            let dx = xi - xj;
-            if dx > THRESHOLD {
-                first_relevant += 1;
-            } else {
-                let dy = yi - yj;
-                let dz = zi - zj;
-                if dx * dx + dy * dy + dz * dz < THRESHOLD2 {
-                    ans.push(if ii < ij { (ii, ij) } else { (ij, ii) });
-                }
-            }
-        }
-    }
-    ans
+pub trait IntervalSolver {
+    fn solve_interval(
+        xyzi: &[(f32, f32, f32, u16)],
+        start: usize,
+        end: usize,
+        ret: &mut Vec<(u16, u16)>,
+    );
 }
-pub fn solve_subscan(xyzi: &[(f32, f32, f32, u16)]) -> Vec<(u16, u16)> {
-    #[derive(Clone)]
-    struct PointY {
-        y: f32,
-        x: f32,
-        z: f32,
-        idx: u16,
-    }
-    impl PartialEq for PointY {
-        fn eq(&self, other: &Self) -> bool {
-            self.idx == other.idx
-        }
-    }
-    impl PartialOrd for PointY {
-        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-            Some(f32::total_cmp(&self.y, &other.y).then_with(|| self.idx.cmp(&other.idx)))
-        }
-    }
-    impl Eq for PointY {}
-    impl Ord for PointY {
-        fn cmp(&self, other: &Self) -> Ordering {
-            f32::total_cmp(&self.y, &other.y).then_with(|| self.idx.cmp(&other.idx))
-        }
-    }
-    let n = xyzi.len();
-    assert!(n <= (u16::MAX - 10) as usize);
-
-    let mut xyzi = xyzi.to_owned();
-    assert_eq!(n, xyzi.len());
-
-    xyzi.sort_unstable_by(|(ax, _, _, _), (bx, _, _, _)| ax.total_cmp(bx));
-
-    let mut slice_queue: VecDeque<PointY> = VecDeque::new();
-    let mut slice_set: BTreeSet<PointY> = BTreeSet::new();
-    let mut ans = Vec::new();
-    for i in 0..n {
-        let (xi, yi, zi, ii) = xyzi[i];
-        while slice_queue.front().is_some() && xi - slice_queue.front().unwrap().x > THRESHOLD {
-            slice_set.remove(&slice_queue.pop_front().unwrap());
-        }
-        slice_queue.push_back(PointY {
-            x: xi,
-            y: yi,
-            z: zi,
-            idx: ii,
-        });
-        for PointY {
-            y: yj,
-            x: xj,
-            z: zj,
-            idx: ij,
-        } in slice_set.range(
-            PointY {
-                x: 0.0,
-                y: yi - THRESHOLD,
-                z: 0.0,
-                idx: u16::MAX - 1,
-            }..PointY {
-                x: 0.0,
-                y: yi + THRESHOLD,
-                z: 0.0,
-                idx: u16::MAX,
-            },
-        ) {
-            let dx = xi - xj;
-            let dy = yi - yj;
-            let dz = zi - zj;
-            if dx * dx + dy * dy + dz * dz < THRESHOLD2 {
-                ans.push(if ii < *ij { (ii, *ij) } else { (*ij, ii) });
-            }
-        }
-        slice_set.insert(slice_queue.back().unwrap().clone());
-    }
-    ans
-}
-pub fn solve_subscan_threaded(
+pub fn solve_threaded<IS: IntervalSolver>(
     xyzi: &mut [(f32, f32, f32, u16)],
     parallel: NonZeroUsize,
     ret: &mut Vec<MaybeUninit<(u16, u16)>>,
@@ -170,14 +74,11 @@ pub fn solve_subscan_threaded(
             } else {
                 usize::min(start + chunk_size, xyzi.len())
             };
-            (
-                if start < end {
-                    vec_wrap_maybeinit(subscan::solve_interval(&xyzi, start, end))
-                } else {
-                    Vec::new()
-                },
-                chunk_idx == 0,
-            )
+            let mut ret = Vec::new();
+            if start < end {
+                IS::solve_interval(&xyzi, start, end, &mut ret);
+            }
+            (vec_wrap_maybeinit(ret), chunk_idx == 0)
         })
         .reduce(
             || (Vec::new(), false),
@@ -198,45 +99,79 @@ pub fn solve_subscan_threaded(
             },
         );
 }
-mod subscan {
-    use super::*;
-
-    #[derive(Clone)]
-    struct PointY {
-        y: f32,
-        x: f32,
-        z: f32,
-        idx: u16,
-    }
-    impl PartialEq for PointY {
-        fn eq(&self, other: &Self) -> bool {
-            self.idx == other.idx
-        }
-    }
-    impl PartialOrd for PointY {
-        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-            Some(f32::total_cmp(&self.y, &other.y).then_with(|| self.idx.cmp(&other.idx)))
-        }
-    }
-    impl Eq for PointY {}
-    impl Ord for PointY {
-        fn cmp(&self, other: &Self) -> Ordering {
-            f32::total_cmp(&self.y, &other.y).then_with(|| self.idx.cmp(&other.idx))
-        }
-    }
-    pub fn solve_interval(
+pub struct ScanSolver;
+impl IntervalSolver for ScanSolver {
+    fn solve_interval(
         xyzi: &[(f32, f32, f32, u16)],
         start: usize,
         end: usize,
-    ) -> Vec<(u16, u16)> {
+        ret: &mut Vec<(u16, u16)>,
+    ) {
+        ret.truncate(0);
+
+        let mut first_relevant = {
+            let pre_start_x = xyzi[start].0 - THRESHOLD;
+            let (Ok(i) | Err(i)) = xyzi.binary_search_by(|&(x, _, _, _)| x.total_cmp(&pre_start_x));
+            i
+        };
+        for i in start..end {
+            let (xi, yi, zi, ii) = xyzi[i];
+            for j in first_relevant..i {
+                let (xj, yj, zj, ij) = xyzi[j];
+                let dx = xi - xj;
+                if dx > THRESHOLD {
+                    first_relevant += 1;
+                } else {
+                    let dy = yi - yj;
+                    let dz = zi - zj;
+                    if dx * dx + dy * dy + dz * dz < THRESHOLD2 {
+                        ret.push(if ii < ij { (ii, ij) } else { (ij, ii) });
+                    }
+                }
+            }
+        }
+    }
+}
+pub struct SubscanSolver;
+impl IntervalSolver for SubscanSolver {
+    fn solve_interval(
+        xyzi: &[(f32, f32, f32, u16)],
+        start: usize,
+        end: usize,
+        ret: &mut Vec<(u16, u16)>,
+    ) {
+        #[derive(Clone)]
+        struct PointY {
+            y: f32,
+            x: f32,
+            z: f32,
+            idx: u16,
+        }
+        impl PartialEq for PointY {
+            fn eq(&self, other: &Self) -> bool {
+                self.idx == other.idx
+            }
+        }
+        impl PartialOrd for PointY {
+            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+                Some(f32::total_cmp(&self.y, &other.y).then_with(|| self.idx.cmp(&other.idx)))
+            }
+        }
+        impl Eq for PointY {}
+        impl Ord for PointY {
+            fn cmp(&self, other: &Self) -> Ordering {
+                f32::total_cmp(&self.y, &other.y).then_with(|| self.idx.cmp(&other.idx))
+            }
+        }
         let n = xyzi.len();
         assert!(n <= (u16::MAX - 10) as usize);
+
+        ret.truncate(0);
 
         let pre_start_x = xyzi[start].0 - THRESHOLD;
 
         let mut slice_queue: VecDeque<PointY> = VecDeque::new();
         let mut slice_set: BTreeSet<PointY> = BTreeSet::new();
-        let mut ans = Vec::new();
         for i in {
             let (Ok(pre_start) | Err(pre_start)) =
                 xyzi.binary_search_by(|&(x, _, _, _)| x.total_cmp(&pre_start_x));
@@ -280,12 +215,11 @@ mod subscan {
                 let dy = yi - yj;
                 let dz = zi - zj;
                 if dx * dx + dy * dy + dz * dz < THRESHOLD2 {
-                    ans.push(if ii < *ij { (ii, *ij) } else { (*ij, ii) });
+                    ret.push(if ii < *ij { (ii, *ij) } else { (*ij, ii) });
                 }
             }
             slice_set.insert(slice_queue.back().unwrap().clone());
         }
-        ans
     }
 }
 

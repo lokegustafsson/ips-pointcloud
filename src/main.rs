@@ -1,11 +1,13 @@
 use ips_pointcloud::{
-    compute_closeness, parse_input, slice_assume_init, solve_naive, solve_scan, solve_subscan,
-    solve_subscan_threaded,
+    compute_closeness, parse_input, slice_assume_init, solve_naive, solve_threaded, ScanSolver,
+    SubscanSolver,
 };
-use std::{io, time::Instant};
+use std::time::Instant;
+
+const DATA: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/data.in"));
 
 fn main() {
-    let xyzi = parse_input(io::stdin().lock());
+    let xyzi = &parse_input(DATA);
     let parallel = std::thread::available_parallelism().unwrap();
     dbg!(parallel);
     {
@@ -15,31 +17,32 @@ fn main() {
         dbg!(xc, yc, zc, us);
     }
 
-    //let mut ans = solve_naive(&xyzi);
+    let mut ans = solve_naive(&xyzi);
     let mut answers = Vec::new();
-    //answers.push(run("solve_scan", || solve_scan(&xyzi)));
-    //answers.push(run("solve_subscan", || {
-    //    solve_subscan(&xyzi)
-    //}));
 
-    let mut solve_subscan_threaded_xyzi = Vec::new();
-    let mut solve_subscan_threaded_ret = Vec::new();
+    let mut scan_xyzi = Vec::new();
+    let mut scan_ret = Vec::new();
     answers.push({
-        run("solve_subscan_threaded", || {
-            // `solve_subscan_threaded` will sort `xyzi` by `x`.
-            // This memcpy takes like 70% of the run time
-            solve_subscan_threaded_xyzi.truncate(0);
-            solve_subscan_threaded_xyzi.extend_from_slice(&xyzi);
-            solve_subscan_threaded(
-                &mut solve_subscan_threaded_xyzi,
-                parallel,
-                &mut solve_subscan_threaded_ret,
-            );
+        run("solve_threaded_scan", || {
+            scan_xyzi.truncate(0);
+            scan_xyzi.extend_from_slice(&xyzi);
+            solve_threaded::<ScanSolver>(&mut scan_xyzi, parallel, &mut scan_ret);
         });
-        unsafe { slice_assume_init(solve_subscan_threaded_ret.as_mut()) }
+        unsafe { slice_assume_init(scan_ret.as_mut()) }
     });
-    /*{
-    println!("Neighbor count: {}", ans.len());
+
+    let mut subscan_xyzi = Vec::new();
+    let mut subscan_ret = Vec::new();
+    answers.push({
+        run("solve_threaded_subscan", || {
+            subscan_xyzi.truncate(0);
+            subscan_xyzi.extend_from_slice(&xyzi);
+            solve_threaded::<SubscanSolver>(&mut subscan_xyzi, parallel, &mut subscan_ret);
+        });
+        unsafe { slice_assume_init(subscan_ret.as_mut()) }
+    });
+    {
+        println!("Neighbor count: {}", ans.len());
         ans.sort_unstable();
         for (i, a) in answers.iter_mut().enumerate() {
             a.sort_unstable();
@@ -48,16 +51,16 @@ fn main() {
                 assert_eq!(ans[j], a[j], "{i}, {j}");
             }
         }
-    }*/
-    fn run<'a>(msg: &str, mut solver: impl FnMut()) {
-        const N: usize = 3000;
-        let start = Instant::now();
-        for _ in 0..N {
-            solver();
-        }
-        println!(
-            "{msg}:\t{:>6}us",
-            Instant::now().duration_since(start).as_micros() / (N as u128)
-        );
     }
+}
+fn run<'a>(msg: &str, mut solver: impl FnMut()) {
+    const N: usize = 3000;
+    let start = Instant::now();
+    for _ in 0..N {
+        solver();
+    }
+    println!(
+        "{msg}:\t{:>6}us",
+        Instant::now().duration_since(start).as_micros() / (N as u128)
+    );
 }
