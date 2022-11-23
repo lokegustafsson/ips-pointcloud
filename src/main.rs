@@ -4,7 +4,7 @@ use ips_pointcloud::{
 };
 use std::time::Instant;
 
-const DATA: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/data.in"));
+const DATA: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/positions.xyz"));
 
 fn main() {
     let xyzi = &parse_input(DATA);
