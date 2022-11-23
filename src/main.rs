@@ -14,13 +14,15 @@ fn main() {
         let start = Instant::now();
         let [xc, yc, zc] = compute_closeness(xyzi);
         let us = Instant::now().duration_since(start).as_micros();
-        dbg!(xc, yc, zc, us);
+        // Scan and Subscan works best if closeness is increasing with x,y,z
+        // We can reflect the points without changing the answers.
+        println!("close pairs (x,y,z): {xc} {yc} {zc} ({us}us)");
     }
 
     let mut ans = solve_naive(xyzi);
     let mut answers = Vec::new();
 
-    /*
+    // solve_threaded_scan: Threaded 1D pass, trying all pairs with close x-vals
     let mut scan_xyzi = Vec::new();
     let mut scan_ret = Vec::new();
     answers.push({
@@ -31,8 +33,8 @@ fn main() {
         });
         unsafe { slice_assume_init(scan_ret.as_mut()) }
     });
-    */
 
+    // solve_threaded_subscan: Threaded 2D pass, trying all pairs with close x-vals & y-vals.
     let mut subscan_xyzi = Vec::new();
     let mut subscan_ret = Vec::new();
     answers.push({
