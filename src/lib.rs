@@ -39,7 +39,7 @@ pub trait IntervalSolver {
 pub fn solve_threaded<IS: IntervalSolver>(
     xyzi: &mut [(f32, f32, f32, u16)],
     parallel: NonZeroUsize,
-    ret: &mut Vec<MaybeUninit<(u16, u16)>>,
+    ret: &mut UnsafeCell<Vec<MaybeUninit<(u16, u16)>>>,
 ) {
     let n = xyzi.len();
     assert!(n <= (u16::MAX - 10) as usize);
@@ -48,20 +48,17 @@ pub fn solve_threaded<IS: IntervalSolver>(
     xyzi.par_sort_unstable_by(|(ax, _, _, _), (bx, _, _, _)| ax.total_cmp(bx));
 
     #[derive(Clone, Copy)]
-    struct RetPtr(*const UnsafeCell<Vec<MaybeUninit<(u16, u16)>>>);
-    impl RetPtr {
-        unsafe fn get_mut(self) -> &'static mut Vec<MaybeUninit<(u16, u16)>> {
+    struct RetPtr<'a>(&'a UnsafeCell<Vec<MaybeUninit<(u16, u16)>>>);
+    impl<'a> RetPtr<'a> {
+        unsafe fn get_mut(self) -> &'a mut Vec<MaybeUninit<(u16, u16)>> {
             &mut *UnsafeCell::raw_get(self.0)
         }
     }
-    unsafe impl Send for RetPtr {}
-    unsafe impl Sync for RetPtr {}
-    let ret_ptr = unsafe {
-        RetPtr(mem::transmute::<*mut Vec<_>, *const UnsafeCell<Vec<_>>>(
-            ret,
-        ))
-    };
-    ret.truncate(0);
+    unsafe impl<'a> Send for RetPtr<'a> {}
+    unsafe impl<'a> Sync for RetPtr<'a> {}
+
+    ret.get_mut().truncate(0);
+    let ret_ref = RetPtr(ret);
 
     (0..parallel.get())
         .into_par_iter()
@@ -84,7 +81,10 @@ pub fn solve_threaded<IS: IntervalSolver>(
             move |(mut a, a_first), (b, b_first)| {
                 if a_first || b_first {
                     {
-                        let ret_inner = unsafe { ret_ptr.get_mut() };
+                        // SAFETY: `a_first || b_first` only holds in single branch of reduction tree.
+                        // We are hence the only thread currently executing this block, since we
+                        // must return before another thread can have `a_first || b_first`.
+                        let ret_inner = unsafe { ret_ref.get_mut() };
                         ret_inner.extend_from_slice(&a);
                         ret_inner.extend_from_slice(&b);
                     }

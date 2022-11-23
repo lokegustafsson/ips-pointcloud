@@ -2,7 +2,7 @@ use ips_pointcloud::{
     compute_closeness, parse_input, slice_assume_init, solve_naive, solve_threaded, ScanSolver,
     SubscanSolver,
 };
-use std::time::Instant;
+use std::{cell::UnsafeCell, time::Instant};
 
 const DATA: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/positions.xyz"));
 
@@ -24,26 +24,26 @@ fn main() {
 
     // solve_threaded_scan: Threaded 1D pass, trying all pairs with close x-vals
     let mut scan_xyzi = Vec::new();
-    let mut scan_ret = Vec::new();
+    let mut scan_ret = UnsafeCell::new(Vec::new());
     answers.push({
         run("solve_threaded_scan", || {
             scan_xyzi.truncate(0);
             scan_xyzi.extend_from_slice(xyzi);
             solve_threaded::<ScanSolver>(&mut scan_xyzi, parallel, &mut scan_ret);
         });
-        unsafe { slice_assume_init(scan_ret.as_mut()) }
+        unsafe { slice_assume_init(scan_ret.get_mut()) }
     });
 
     // solve_threaded_subscan: Threaded 2D pass, trying all pairs with close x-vals & y-vals.
     let mut subscan_xyzi = Vec::new();
-    let mut subscan_ret = Vec::new();
+    let mut subscan_ret = UnsafeCell::new(Vec::new());
     answers.push({
         run("solve_threaded_subscan", || {
             subscan_xyzi.truncate(0);
             subscan_xyzi.extend_from_slice(xyzi);
             solve_threaded::<SubscanSolver>(&mut subscan_xyzi, parallel, &mut subscan_ret);
         });
-        unsafe { slice_assume_init(subscan_ret.as_mut()) }
+        unsafe { slice_assume_init(subscan_ret.get_mut()) }
     });
     {
         println!("Neighbor count: {}", ans.len());

@@ -1,13 +1,14 @@
 use criterion::Criterion;
 use ips_pointcloud::{compute_closeness, parse_input, solve_threaded, ScanSolver, SubscanSolver};
+use std::cell::UnsafeCell;
 
 const DATA: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/positions.xyz"));
 
 fn criterion_benchmark(c: &mut Criterion) {
     let xyzi = &parse_input(DATA);
     let parallel = std::thread::available_parallelism().unwrap();
-    let mut scan_ret = Vec::new();
-    let mut subscan_ret = Vec::new();
+    let mut scan_ret = UnsafeCell::new(Vec::new());
+    let mut subscan_ret = UnsafeCell::new(Vec::new());
 
     c.bench_function("compute_closeness", |b| {
         b.iter(|| compute_closeness(criterion::black_box(xyzi)))

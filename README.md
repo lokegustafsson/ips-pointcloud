@@ -40,7 +40,8 @@ pub fn solve_threaded<SubscanSolver>(
 might seem a little weird, but it is motivated:
 - We pass `xyzi` mutably since we want to sort it without allocating. In the benchmark we still
     include copying from an immutable `xyzi` to this mutable buffer before every call, but in a real
-    application we could skip the copy and sort an already almost-sorted array.
+    application we could skip the copy and sort an already almost-sorted array giving a further ~30%
+    speedup.
 - We pass `parallel` since syscalling for it every call is significant overhead.
 - We pass `ret` as an out parameter to re-use the allocation from earlier calls.
 
