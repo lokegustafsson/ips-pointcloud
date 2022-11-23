@@ -29,6 +29,21 @@ to its starting x-value
 The first parallelization overhead is inherent, the second could be avoided by for example executing
 a callback function for each close pair.
 
+The solver API of
+```
+pub fn solve_threaded<SubscanSolver>(
+    xyzi: &mut [(f32, f32, f32, u16)],
+    parallel: NonZeroUsize,
+    ret: &mut Vec<MaybeUninit<(u16, u16)>>,
+)
+```
+might seem a little weird, but it is motivated:
+- We pass `xyzi` mutably since we want to sort it without allocating. In the benchmark we still
+    including copying from an immutable `xyzi` to this mutable buffer before every call, but in a
+    real application we could skip the copy and sort an already almost-sorted array.
+- We pass `parallel` since syscalling for it every call is significant overhead.
+- We pass `ret` as an out parameter to re-use the allocation from earlier calls.
+
 ### Attempted approaches that did not help
 
 - Struct-of-array layout (does not match access patterns)
