@@ -67,7 +67,7 @@ pub fn solve_threaded<IS: IntervalSolver>(
     (0..parallel.get())
         .into_par_iter()
         .map(|chunk_idx| {
-            let chunk_size = (xyzi.len() / parallel.get()).max(1).min(xyzi.len());
+            let chunk_size = (xyzi.len() / parallel.get()).clamp(1, xyzi.len());
             let start = chunk_idx * chunk_size;
             let end = if chunk_idx + 1 == parallel.get() {
                 xyzi.len()
@@ -76,7 +76,7 @@ pub fn solve_threaded<IS: IntervalSolver>(
             };
             let mut ret = Vec::new();
             if start < end {
-                IS::solve_interval(&xyzi, start, end, &mut ret);
+                IS::solve_interval(xyzi, start, end, &mut ret);
             }
             (vec_wrap_maybeinit(ret), chunk_idx == 0)
         })
@@ -188,7 +188,7 @@ impl IntervalSolver for SubscanSolver {
                 slice_set.remove(&PointY { y, x, z, idx });
                 first_index += 1;
             }
-            for PointY {
+            for &PointY {
                 y: yj,
                 x: xj,
                 z: zj,
@@ -210,7 +210,7 @@ impl IntervalSolver for SubscanSolver {
                 let dy = yi - yj;
                 let dz = zi - zj;
                 if dx * dx + dy * dy + dz * dz < THRESHOLD2 {
-                    ret.push(if ii < *ij { (ii, *ij) } else { (*ij, ii) });
+                    ret.push(if ii < ij { (ii, ij) } else { (ij, ii) });
                 }
             }
             slice_set.insert(PointY {
@@ -228,7 +228,7 @@ pub fn parse_input(mut source: impl Read) -> Vec<(f32, f32, f32, u16)> {
     source.read_to_string(&mut input).unwrap();
     let mut ret = Vec::new();
     for (i, line) in input.lines().enumerate() {
-        let mut nums = line.split(" ");
+        let mut nums = line.split(' ');
         let x = nums.next().unwrap().parse().unwrap();
         let y = nums.next().unwrap().parse().unwrap();
         let z = nums.next().unwrap().parse().unwrap();
@@ -266,6 +266,9 @@ pub fn compute_closeness(xyzi: &[(f32, f32, f32, u16)]) -> [usize; 3] {
     }
 }
 
+/// # Safety
+///
+/// Input array must be fully initialized
 pub unsafe fn slice_assume_init(s: &mut [MaybeUninit<(u16, u16)>]) -> &mut [(u16, u16)] {
     mem::transmute(s)
 }

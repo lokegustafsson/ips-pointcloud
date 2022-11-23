@@ -12,12 +12,12 @@ fn main() {
     dbg!(parallel);
     {
         let start = Instant::now();
-        let [xc, yc, zc] = compute_closeness(&xyzi);
+        let [xc, yc, zc] = compute_closeness(xyzi);
         let us = Instant::now().duration_since(start).as_micros();
         dbg!(xc, yc, zc, us);
     }
 
-    let mut ans = solve_naive(&xyzi);
+    let mut ans = solve_naive(xyzi);
     let mut answers = Vec::new();
 
     let mut scan_xyzi = Vec::new();
@@ -25,7 +25,7 @@ fn main() {
     answers.push({
         run("solve_threaded_scan", || {
             scan_xyzi.truncate(0);
-            scan_xyzi.extend_from_slice(&xyzi);
+            scan_xyzi.extend_from_slice(xyzi);
             solve_threaded::<ScanSolver>(&mut scan_xyzi, parallel, &mut scan_ret);
         });
         unsafe { slice_assume_init(scan_ret.as_mut()) }
@@ -36,7 +36,7 @@ fn main() {
     answers.push({
         run("solve_threaded_subscan", || {
             subscan_xyzi.truncate(0);
-            subscan_xyzi.extend_from_slice(&xyzi);
+            subscan_xyzi.extend_from_slice(xyzi);
             solve_threaded::<SubscanSolver>(&mut subscan_xyzi, parallel, &mut subscan_ret);
         });
         unsafe { slice_assume_init(subscan_ret.as_mut()) }
@@ -53,7 +53,7 @@ fn main() {
         }
     }
 }
-fn run<'a>(msg: &str, mut solver: impl FnMut()) {
+fn run(msg: &str, mut solver: impl FnMut()) {
     const N: usize = 3000;
     let start = Instant::now();
     for _ in 0..N {
