@@ -19,3 +19,4 @@ harness = false
 debug = 1
 lto = true
 opt-level = 3
+codegen-units = 1
