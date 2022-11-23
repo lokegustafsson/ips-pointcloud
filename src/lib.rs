@@ -1,7 +1,7 @@
 use std::{
     cell::UnsafeCell,
     cmp::Ordering,
-    collections::{BTreeSet, VecDeque},
+    collections::BTreeSet,
     io::Read,
     mem::{self, MaybeUninit},
     num::NonZeroUsize,
@@ -172,25 +172,22 @@ impl IntervalSolver for SubscanSolver {
         let (Ok(pre_start) | Err(pre_start)) =
             xyzi.binary_search_by(|&(x, _, _, _)| x.total_cmp(&pre_start_x));
 
-        let mut slice_queue: VecDeque<PointY> = (pre_start..start)
+        let mut first_index = pre_start;
+
+        let mut slice_set: BTreeSet<PointY> = (pre_start..start)
             .map(|i| {
                 let (x, y, z, idx) = xyzi[i];
                 PointY { x, y, z, idx }
             })
             .collect();
-        let mut slice_set: BTreeSet<PointY> = slice_queue.iter().cloned().collect();
 
         for i in start..end {
             let (xi, yi, zi, ii) = xyzi[i];
-            while slice_queue.front().is_some() && xi - slice_queue.front().unwrap().x > THRESHOLD {
-                assert!(slice_set.remove(&slice_queue.pop_front().unwrap()));
+            while first_index < i && xi - xyzi[first_index].0 > THRESHOLD {
+                let (x, y, z, idx) = xyzi[first_index];
+                slice_set.remove(&PointY { y, x, z, idx });
+                first_index += 1;
             }
-            slice_queue.push_back(PointY {
-                x: xi,
-                y: yi,
-                z: zi,
-                idx: ii,
-            });
             for PointY {
                 y: yj,
                 x: xj,
@@ -216,7 +213,12 @@ impl IntervalSolver for SubscanSolver {
                     ret.push(if ii < *ij { (ii, *ij) } else { (*ij, ii) });
                 }
             }
-            slice_set.insert(slice_queue.back().unwrap().clone());
+            slice_set.insert(PointY {
+                x: xi,
+                y: yi,
+                z: zi,
+                idx: ii,
+            });
         }
     }
 }
