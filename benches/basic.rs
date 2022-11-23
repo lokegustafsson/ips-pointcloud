@@ -1,7 +1,7 @@
 use criterion::Criterion;
 use ips_pointcloud::{compute_closeness, parse_input, solve_threaded, ScanSolver, SubscanSolver};
 
-const DATA: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/data.in"));
+const DATA: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/positions.xyz"));
 
 fn criterion_benchmark(c: &mut Criterion) {
     let xyzi = &parse_input(DATA);
