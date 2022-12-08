@@ -2,6 +2,7 @@
 let
   rustPkgs = pkgs.rustBuilder.makePackageSet {
     rustVersion = "latest";
+    hostPlatformFeatures = ["avx2" "fma"];
     packageFun = import ./Cargo.nix;
     packageOverrides = p:
       let

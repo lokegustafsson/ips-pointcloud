@@ -4,7 +4,9 @@ Find all pairs of points in `positions.xyz` closer than `0.05` euclidean distanc
 
 ### Performance
 
-About 420us on my 24-thread 5900x. Limited by BTree insertion/deletion/lookup.
+About 375us using AVX2+FMA on my 24-thread 5900x. About 420us using alternative non-SIMD algorithm
+that is limited by BTree insertion/deletion/lookup. I have not tried AVX512 since I lack hardware
+support myself.
 
 ### Explanation
 
@@ -33,6 +35,7 @@ The solver API of
 ```
 pub fn solve_threaded<SubscanSolver>(
     xyzi: &mut [(f32, f32, f32, u16)],
+    (x_soa, y_soa, z_soa, i_soa): (&mut Vec<f32>, &mut Vec<f32>, &mut Vec<f32>, &mut Vec<u16>),
     parallel: NonZeroUsize,
     ret: &mut Vec<MaybeUninit<(u16, u16)>>,
 )
@@ -42,19 +45,24 @@ might seem a little weird, but it is motivated:
     include copying from an immutable `xyzi` to this mutable buffer before every call, but in a real
     application we could skip the copy and sort an already almost-sorted array giving a further ~30%
     speedup.
+- The BTree solution is fastest with a AoS layout, while the SIMD solution is fastest with a SoA
+    layout. Since the SoA must be sorted by `x`, we start by sorting the AoS input and copying to
+    some SoA arrays. We pass mutable Vec:s to minimize allocation and deallocation.
 - We pass `parallel` since syscalling for it every call is significant overhead.
 - We pass `ret` as an out parameter to re-use the allocation from earlier calls.
 
 ### Attempted approaches that did not help
 
-- Struct-of-array layout (does not match access patterns)
+- ~~Struct-of-array layout (does not match access patterns)~~ (useful in SIMD solution)
 - Rebuilding stdlib `BTreeSet` with `B != 6` (`B = 6` seems like a very good default actually)
-- AVX2 SIMD pair distance computation (maybe bottlenecked by branch before answer insertion?)
+- ~~AVX2 SIMD pair distance computation (maybe bottlenecked by branch before answer insertion?)~~
+    (useful after realizing that most points with close x-values are not close in euclidian distance
+    and can be early-exited.
 
 ### How to run
 
-`nix develop` followed by `cargo run --release`. Cargo could also be acquired from another package
-manager. `nix run` also works, but causes a 1-2% slowdown for some reason.
+Either `nix run` or `nix develop` followed by `cargo run --release`. Cargo could also be acquired
+from another package manager.
 
 The input file is included at compile time for convenience. One can change
 ```
