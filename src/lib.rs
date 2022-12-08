@@ -1,4 +1,6 @@
-use rayon::prelude::{IntoParallelIterator, ParallelIterator, ParallelSliceMut};
+use rayon::prelude::{
+    IndexedParallelIterator, IntoParallelIterator, ParallelIterator, ParallelSliceMut,
+};
 use std::{
     cell::UnsafeCell,
     cmp::Ordering,
@@ -29,8 +31,10 @@ pub fn solve_naive(xyzi: &[(f32, f32, f32, u16)]) -> Vec<(u16, u16)> {
 }
 
 pub trait IntervalSolver {
+    const USE_SOA: bool;
     fn solve_interval(
         xyzi: &[(f32, f32, f32, u16)],
+        xyzi_soa: (&[f32], &[f32], &[f32], &[u16]),
         start: usize,
         end: usize,
         ret: &mut Vec<(u16, u16)>,
@@ -38,6 +42,7 @@ pub trait IntervalSolver {
 }
 pub fn solve_threaded<IS: IntervalSolver>(
     xyzi: &mut [(f32, f32, f32, u16)],
+    (x_soa, y_soa, z_soa, i_soa): (&mut Vec<f32>, &mut Vec<f32>, &mut Vec<f32>, &mut Vec<u16>),
     parallel: NonZeroUsize,
     ret: &mut UnsafeCell<Vec<MaybeUninit<(u16, u16)>>>,
 ) {
@@ -46,6 +51,32 @@ pub fn solve_threaded<IS: IntervalSolver>(
 
     assert_eq!(n, xyzi.len());
     xyzi.par_sort_unstable_by(|(ax, _, _, _), (bx, _, _, _)| ax.total_cmp(bx));
+    fn soa(
+        xyzi: &[(f32, f32, f32, u16)],
+        (x_soa, y_soa, z_soa, i_soa): (&mut Vec<f32>, &mut Vec<f32>, &mut Vec<f32>, &mut Vec<u16>),
+    ) {
+        [Ok(x_soa), Ok(y_soa), Ok(z_soa), Err(i_soa)]
+            .into_par_iter()
+            .enumerate()
+            .for_each(|(i, dst)| match (i, dst) {
+                (0, Ok(x)) => x.extend(xyzi.iter().map(|xyzi| xyzi.0)),
+                (1, Ok(y)) => y.extend(xyzi.iter().map(|xyzi| xyzi.1)),
+                (2, Ok(z)) => z.extend(xyzi.iter().map(|xyzi| xyzi.2)),
+                (3, Err(i)) => i.extend(xyzi.iter().map(|xyzi| xyzi.3)),
+                _ => unreachable!(),
+            });
+    }
+    if IS::USE_SOA {
+        x_soa.truncate(0);
+        y_soa.truncate(0);
+        z_soa.truncate(0);
+        i_soa.truncate(0);
+        soa(&xyzi, (x_soa, y_soa, z_soa, i_soa));
+        assert_eq!(n, x_soa.len());
+        assert_eq!(n, y_soa.len());
+        assert_eq!(n, z_soa.len());
+        assert_eq!(n, i_soa.len());
+    }
 
     #[derive(Clone, Copy)]
     struct RetPtr<'a>(&'a UnsafeCell<Vec<MaybeUninit<(u16, u16)>>>);
@@ -72,7 +103,7 @@ pub fn solve_threaded<IS: IntervalSolver>(
             };
             let mut ret = Vec::new();
             if start < end {
-                IS::solve_interval(xyzi, start, end, &mut ret);
+                IS::solve_interval(xyzi, (&x_soa, &y_soa, &z_soa, &i_soa), start, end, &mut ret);
             }
             (vec_wrap_maybeinit(ret), chunk_idx == 0)
         })
@@ -100,8 +131,10 @@ pub fn solve_threaded<IS: IntervalSolver>(
 }
 pub struct ScanSolver;
 impl IntervalSolver for ScanSolver {
+    const USE_SOA: bool = true;
     fn solve_interval(
-        xyzi: &[(f32, f32, f32, u16)],
+        _xyzi: &[(f32, f32, f32, u16)],
+        (vx, vy, vz, vi): (&[f32], &[f32], &[f32], &[u16]),
         start: usize,
         end: usize,
         ret: &mut Vec<(u16, u16)>,
@@ -109,23 +142,75 @@ impl IntervalSolver for ScanSolver {
         ret.truncate(0);
 
         let mut first_relevant = {
-            let pre_start_x = xyzi[start].0 - THRESHOLD;
-            let (Ok(i) | Err(i)) = xyzi.binary_search_by(|&(x, _, _, _)| x.total_cmp(&pre_start_x));
+            let pre_start_x = vx[start] - THRESHOLD;
+            let (Ok(i) | Err(i)) = vx.binary_search_by(|&x| x.total_cmp(&pre_start_x));
             i
         };
         for i in start..end {
-            let (xi, yi, zi, ii) = xyzi[i];
-            for j in first_relevant..i {
-                let (xj, yj, zj, ij) = xyzi[j];
+            let (xi, yi, zi, ii) = (vx[i], vy[i], vz[i], vi[i]);
+            while xi - vx[first_relevant] > THRESHOLD {
+                first_relevant += 1;
+            }
+            let end = i - (i - first_relevant) % 8;
+            for j in (first_relevant..end).step_by(8) {
+                unsafe { simd((vx, vy, vz, vi), (xi, yi, zi, ii), j, ret) }
+            }
+            for j in end..i {
+                let (xj, yj, zj, ij) = (vx[j], vy[j], vz[j], vi[j]);
                 let dx = xi - xj;
-                if dx > THRESHOLD {
-                    first_relevant += 1;
+                let dy = yi - yj;
+                let dz = zi - zj;
+                if dx * dx + dy * dy + dz * dz < THRESHOLD2 {
+                    ret.push(if ii < ij { (ii, ij) } else { (ij, ii) });
+                }
+            }
+        }
+        unsafe fn simd(
+            (vx, vy, vz, vi): (&[f32], &[f32], &[f32], &[u16]),
+            (xi, yi, zi, ii): (f32, f32, f32, u16),
+            j: usize,
+            ret: &mut Vec<(u16, u16)>,
+        ) {
+            use std::arch::x86_64::{
+                _mm256_cmp_ps, _mm256_fmadd_ps, _mm256_loadu_ps, _mm256_mul_ps, _mm256_set1_ps,
+                _mm256_storeu_ps, _mm256_sub_ps, _mm256_testz_ps, _CMP_LT_OQ,
+            };
+            let xi = _mm256_set1_ps(xi);
+            let yi = _mm256_set1_ps(yi);
+            let zi = _mm256_set1_ps(zi);
+            let threshold2 = _mm256_set1_ps(THRESHOLD2);
+            let xj = _mm256_loadu_ps(&vx[j] as *const f32);
+            let yj = _mm256_loadu_ps(&vy[j] as *const f32);
+            let zj = _mm256_loadu_ps(&vz[j] as *const f32);
+            let dx = _mm256_sub_ps(xi, xj);
+            let dy = _mm256_sub_ps(yi, yj);
+            let dz = _mm256_sub_ps(zi, zj);
+            let delta2 = _mm256_fmadd_ps(dz, dz, _mm256_fmadd_ps(dy, dy, _mm256_mul_ps(dx, dx)));
+            let mask = _mm256_cmp_ps::<_CMP_LT_OQ>(delta2, threshold2);
+            let allzero = _mm256_testz_ps(mask, mask) == 1;
+            if allzero {
+                return;
+            }
+            let mut mask_f32 = [0f32; 8];
+            _mm256_storeu_ps(&mut mask_f32 as *mut f32, mask);
+            let mut ans_chunk: [(u16, u16); 8] = [(0, 0); 8];
+            assert!(j + 8 <= vi.len());
+            for t in 0..8 {
+                if mask_f32[t].to_bits() == 0 {
+                    ans_chunk[t] = (0, 0)
                 } else {
-                    let dy = yi - yj;
-                    let dz = zi - zj;
-                    if dx * dx + dy * dy + dz * dz < THRESHOLD2 {
-                        ret.push(if ii < ij { (ii, ij) } else { (ij, ii) });
+                    let ij = vi[j + t];
+                    if ii < ij {
+                        ans_chunk[t] = (ii, ij)
+                    } else {
+                        ans_chunk[t] = (ij, ii)
                     }
+                }
+            }
+            for t in 0..8 {
+                match ans_chunk[t] {
+                    (0, 0) => {}
+                    (a, b) => ret.push((a, b)),
                 }
             }
         }
@@ -133,8 +218,10 @@ impl IntervalSolver for ScanSolver {
 }
 pub struct SubscanSolver;
 impl IntervalSolver for SubscanSolver {
+    const USE_SOA: bool = false;
     fn solve_interval(
         xyzi: &[(f32, f32, f32, u16)],
+        _xyzi_soa: (&[f32], &[f32], &[f32], &[u16]),
         start: usize,
         end: usize,
         ret: &mut Vec<(u16, u16)>,
