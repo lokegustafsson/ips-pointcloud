@@ -1,3 +1,11 @@
+### Context
+
+This was a (recruiting) challenge from the company Industrial Path Solutions from November 2022.
+
+I think I wrote a quite good solution, given my hardware (many-core avx2+fma CPU).
+
+https://github.com/industrialpathsolutions/student-challenge-particle-simulation
+
 ### Task
 
 Find all pairs of points in `positions.xyz` closer than `0.05` euclidean distance apart in 3D.
